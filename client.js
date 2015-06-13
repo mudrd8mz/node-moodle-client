@@ -3,7 +3,7 @@
  *
  * @module moodle-api
  * @author David Mudrak <david@moodle.com>
- * @license 3-clause BSD license
+ * @license BSD-2-Clause
  */
 
 const url = require("url");
