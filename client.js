@@ -12,95 +12,131 @@ const https = require("https");
 const querystring = require("querystring");
 const concat = require("concat-stream");
 
-module.exports = new client();
-
+module.exports = {
+    create: function (options) {
+        return new client(options);
+    }
+}
 
 /**
  * Represents a moodle API client.
  *
+ * The options object supports the following properties.
+ *
+ * {string} wwwroot - The moodle hostname to connect to.
+ * {winston.Logger} [logger] - The logger to use, defaults to a dummy non-logger.
+ * {string} [service=moodle_mobile_app] - The web service to use.
+ * {string} [token] - The access token to use.
+ *
  * @constructor
+ * @param {object} options - Client initialization options.
  */
-function client() {};
+function client(options) {
+    var self = this;
 
+    options = options || {};
 
-/**
- * The callback executed by the init() method.
- *
- * @callback client_initialized_callback
- * @param error
- */
-
-
-/**
- * Initializes the moodle API client.
- *
- * @param {winston.Logger} logger - The logger to use.
- * @param {string} wwwroot - The moodle hostname to connect to.
- * @param {string} username - The username to use to authenticate us.
- * @param {string} password - The password to use to authenticate us.
- * @param {string} [service=moodle_mobile_app] - The web service to use.
- * @param {client_initialized_callback} callback - Executed once the client is ready.
- */
-client.prototype.init = function (logger, wwwroot, username, password, service, callback) {
-
-    this.logger = logger;
-    this.host = url.parse(wwwroot);
-    this.username = username;
-    this.password = password;
-
-    if (this.host.protocol === "https:") {
-        this.protocol = https;
+    if ("logger" in options) {
+        self.logger = options.logger;
     } else {
-        this.logger.warn("[init] client using http protocol - credentials are transmitted unencrypted");
-        this.protocol = http;
+        self.logger = {
+            // Set-up a dummy logger doing nothing.
+            debug: function() {},
+            info: function() {},
+            warn: function() {},
+            error: function() {}
+        };
     }
 
-    if (typeof callback === "undefined") {
-        // Only 5 arguments passed.
-        callback = service;
-        service = null;
-    }
+    if ("wwwroot" in options) {
+        self.host = url.parse(options.wwwroot);
 
-    if (!service) {
-        this.service = "moodle_mobile_app";
+        if (self.host.protocol === "https:") {
+            self.protocol = https;
+
+        } else {
+            self.logger.warn("[init] client using http protocol - credentials are transmitted unencrypted");
+            self.protocol = http;
+        }
+
     } else {
-        this.service = service;
+        self.logger.error("[init] wwwroot not defined");
     }
 
-    this.token = null;
+    if ("service" in options) {
+        self.service = options.service;
+    } else {
+        self.service = "moodle_mobile_app";
+    }
 
-    // Authenticate and execute the callback once ready.
-    this.authenticate(callback);
+    if ("token" in options) {
+        self.token = options.token;
+    }
 }
 
+/**
+ * The callback executed by the authenticate() method.
+ *
+ * @callback client_authenticated_callback
+ * @param error
+ */
 
 /**
  * Authenticate the user.
  *
+ * The options object supports the following properties.
+ *
+ * {string} token - The access token to use.
+ * {string} username - The username to use to authenticate us.
+ * {string} password - The password to use to authenticate us.
+ *
+ * Either token, or the username and password must be provided.
+ *
  * @method
- * @param {client_initialized_callback} callback
+ * @param {object} options
+ * @param {client_authenticated_callback} callback
  */
-client.prototype.authenticate = function (callback) {
+client.prototype.authenticate = function (options, callback) {
     var self = this;
+
+    options = options || {};
+
+    if ("token" in options) {
+        self.logger.debug("[auth] token provided");
+        self.token = options.token;
+        return callback(null);
+    } else {
+        self.token = null;
+    }
+
+    if ("username" in options) {
+        self.username = options.username;
+    } else {
+        self.username = null;
+    }
+
+    if ("password" in options) {
+        self.password = options.password;
+    } else {
+        self.password = null;
+    }
+
+    if (self.token === null && (self.username === null || self.password === null)) {
+        self.logger.error("[auth] either token or login credentials must be provided");
+        return callback(new Error("either token or login credentials must be provided"));
+    }
+
     self.logger.debug("[auth] requesting %s token from %s", self.service, self.host.href);
 
-    var query = querystring.stringify({
-        username: self.username,
-        password: self.password,
-        service: self.service
-    });
-
-    // Note that we are submitting the password via POST so that it is not stored in the
-    // web server logs by default. On the other hand, we intentionally submit the username
-    // and the service name as a part of the query string so that the access logs can be
-    // analysed more easily.
+    // Note that we are submitting credentials via POST so that they are not stored in the
+    // web server logs by default. On the other hand, we intentionally submit the service
+    // name as a part of the query string so that the access logs can be analysed easily.
 
     var options = {
         hostname: self.host.hostname,
         port: self.host.port,
         method: "POST",
         path: self.host.pathname + "/login/token.php?" + querystring.stringify({
-            username: self.username,
             service: self.service
         }),
         headers: {
@@ -112,7 +148,7 @@ client.prototype.authenticate = function (callback) {
 
         if (response.statusCode != 200) {
             self.logger.error("[auth] unexpected response status code %d", response.statusCode);
-            return callback("unexpected response status code");
+            return callback(new Error("unexpected response status code"));
         }
 
         response.pipe(concat({encoding: "string"}, function (data) {
@@ -135,7 +171,7 @@ client.prototype.authenticate = function (callback) {
                 return callback(null);
             }
 
-            return callback("unexpected response format");
+            return callback(new Error("unexpected response format"));
         }));
     });
 
@@ -144,10 +180,9 @@ client.prototype.authenticate = function (callback) {
         return callback(e);
     });
 
-    request.write(querystring.stringify({password: self.password}));
+    request.write(querystring.stringify({username: self.username, password: self.password}));
     request.end();
 };
-
 
 /**
  * The callback executed by the call() method.
@@ -160,30 +195,39 @@ client.prototype.authenticate = function (callback) {
 /**
  * Execute a web service function.
  *
- * @param {string} wsfunction - The name of the web service function to call.
- * @param {object} [arguments={}] - Web service function arguments.
- * @param {object} [settings={}] - Additional settings affecting the execution.
+ * The options object supports the following properties.
+ *
+ * {string} function - The name of the web service function to call.
+ * {object} [arguments={}] - Web service function arguments.
+ * {object} [settings={}] - Additional settings affecting the execution.
+ *
+ * @method
+ * @param {object} options
  * @param {function_executed_callback} callback - The callback to execute.
+ * @return {object} - The client instance (to make it chainable).
  */
-client.prototype.call = function (wsfunction, arguments, settings, callback) {
+client.prototype.call = function (options, callback) {
     var self = this;
+    var wsfunction;
+    var arguments = {};
+    var settings = {};
+
+    if ("wsfunction" in options) {
+        wsfunction = options.wsfunction;
+    } else {
+        self.logger.error("[call] missing function name to execute");
+        return callback(new Error("missing function name to execute"));
+    }
+
+    if ("arguments" in options) {
+        arguments = options.arguments;
+    }
+
+    if ("settings" in options) {
+        settings = options.settings;
+    }
+
     self.logger.debug("[call] calling web service function %s", wsfunction);
-
-    if (typeof settings === "undefined") {
-        // Only two arguments provided.
-        callback = arguments;
-        arguments = null;
-        settings = null;
-    }
-
-    if (typeof callback === "undefined") {
-        // Only three arguments provided.
-        callback = settings;
-        settings = null;
-    }
-
-    arguments = arguments || {};
-    settings = settings || {};
 
     var query = JSON.parse(JSON.stringify(arguments));
 
@@ -218,7 +262,7 @@ client.prototype.call = function (wsfunction, arguments, settings, callback) {
         if (!(settings.method === "GET" || settings.method === "POST")
                 || self.protocol.METHODS.indexOf(settings.method) == -1) {
             self.logger.error("[call] requested method not supported (only GET and POST supported)");
-            return callback("unsupported protocol method");
+            return callback(new Error("unsupported protocol method"));
         }
     }
 
@@ -243,7 +287,7 @@ client.prototype.call = function (wsfunction, arguments, settings, callback) {
 
             if (response.statusCode != 200) {
                 self.logger.error("[call] unexpected response status code %d", response.statusCode);
-                return callback("unexpected response status code " + response.statusCode);
+                return callback(new Error("unexpected response status code " + response.statusCode));
             }
 
             response.pipe(concat({encoding: "string"}, function (data) {
@@ -271,7 +315,7 @@ client.prototype.call = function (wsfunction, arguments, settings, callback) {
 
             if (response.statusCode != 200) {
                 self.logger.error("[call] unexpected response status code %d", response.statusCode);
-                return callback("unexpected response status code " + response.statusCode);
+                return callback(new Error("unexpected response status code " + response.statusCode));
             }
 
             response.pipe(concat({encoding: "string"}, function (data) {
@@ -283,8 +327,9 @@ client.prototype.call = function (wsfunction, arguments, settings, callback) {
             return callback(e);
         });
     }
-};
 
+    return self;
+};
 
 /**
  * Helper for processing the response for our GET or POST requests.
@@ -294,6 +339,7 @@ client.prototype.call = function (wsfunction, arguments, settings, callback) {
  * @param {function_executed_callback} callback - The callback to execute.
  */
 function process_request_response(logger, data, callback) {
+
     try {
         data = JSON.parse(data);
     } catch (e) {
