@@ -1,22 +1,60 @@
 moodle-client
 =============
 
-Node.js client for [Moodle](https://moodle.org/) web services API.
+node.js client for [moodle](https://moodle.org/) web services API
 
 ## Requirements
 
-* Moodle web services via REST protocol [enabled](https://docs.moodle.org/en/Using_web_services).
-* Node module [winston](https://github.com/winstonjs/winston) installed.
+* moodle web services via REST protocol [enabled](https://docs.moodle.org/en/Using_web_services).
 
 ## Installation
 
     $ npm install moodle-client
-    $ npm install winston
 
 ## Usage
 
-By default, the client authenticates via username and password to use the moodle mobile web services. Call the `init()` method to
-initialize and authenticate the client. Then make the web service function call via `call()` method.
+Call the `create()` function provided by the module to get a new instance of the client.
+
+    const client = require("moodle-client");
+
+    var c = client.create({
+        wwwroot: "http://localhost/moodle/",
+        token: "d457b5e5b0cc31c05ccf38628e4dfc14"
+    });
+
+Alternatively, to obtain the token for the given username and password, use the `authenticate()` method.
+
+    const client = require("moodle-client");
+
+    var c = client.create({
+        wwwroot: "http://localhost/moodle/"
+    });
+
+    c.authenticate({
+        username: "mysystemusername",
+        password: "my$y$tem pa33w0rd"
+    }, function (error) {
+        if (!error) {
+            // Client is authenticated and ready to be used.
+        }
+    });
+
+Use the `call()` method to execute a web service function at the remote moodle site.
+
+    const client = require("moodle-client");
+
+    var c = client.create({
+        wwwroot: "http://localhost/moodle/",
+        token: "d457b5e5b0cc31c05ccf38628e4dfc14",
+    });
+
+    c.call({wsfunction: "core_webservice_get_site_info"}, function(error, data) {
+        if (!error) {
+            console.log("Hello %s, welcome to %s", info.fullname, info.sitename);
+        }
+    });
+
+To debug and log the client functionality, install and use the winston logger.
 
     const client = require("moodle-client");
     const logger = require("winston");
@@ -24,58 +62,67 @@ initialize and authenticate the client. Then make the web service function call 
     logger.level = "debug";
     logger.cli();
 
-    client.init(logger, "http://localhost/moodle/", "wsuser", "wspasswd", function (error) {
-        if (!error) {
-            client.call("core_webservice_get_site_info", function(error, info) {
-                if (!error) {
-                    console.log(">>> Hello %s, welcome to %s", info.fullname, info.sitename);
-                    console.log(">>> There are %d functions available for you", info.functions.length);
-                }
-            });
-        }
+    var c = client.create({
+        wwwroot: "http://localhost/moodle/",
+        logger: logger
     });
 
-### Custom web service
+To use a custom web service, provide its shortname when creating a new instance of the client. If the service is not specified, the
+client default to using the `moodle_mobile_app` service.
 
-If you have created a custom web service in Moodle (such as the _cohort management_ in the following example), provide its
-shortname as the fifth parameter of the `init()`, followed by the callback.
-
-    client.init(logger, "http://localhost/moodle/", "wsuser", "wspasswd", "cohort_management", function (error) { ... });
-
-### Passing arguments to web service functions
-
-    client.call("core_cohort_get_cohort_members", {"cohortids[]": [1, 2]}, function(error, members) {
-        if (!error && members) {
-            for (var i = 0; i < members.length; i++) {
-                console.log("cohort id %d has %d members", members[i].cohortid, members[i].userids.length);
-            }
-        }
+    var c = client.create({
+        wwwroot: "http://localhost/moodle/",
+        service: "our_cohorts_management"
     });
 
-### Controlling the HTTP method
 
-By default, the GET method is used. To execute the web service function via POST:
+To pass arguments to the web service function, provide them via the arguments object. Additional settings can be provided via the
+settings object.
 
-    client.call("core_message_unblock_contacts", {"userids[]": [2,3]}, {method: "POST"}, function (error) { ... });
+    client.create({
+        wwwroot: "http://localhost/moodle/",
+        logger: logger,
+        token: "d457b5e5b0cc31c05ccf38628e4dfc14"
 
-### Controlling the response data formatting
+    }).call({
+        wsfunction: "core_message_unblock_contacts",
+        arguments: {
+            "userids[]": [1, 2, 3, 4, 5]
+        },
+        settings: {
+            method: "POST"
+        }
 
-See [Moodle dev docs](https://docs.moodle.org/dev/Creating_a_web_service_client#Text_formats) for details.
+    }, function(error, data) {
+        if (error) throw error;
+        logger.info("Done!");
+    });
 
-    client.call("local_myplugin_my_function", {answer: 42}, {raw: false, filter: true}, function (error, data) { ... });
+Additional settings can be provided via the settings object, such as the response data formatting.
+See [moodle dev docs](https://docs.moodle.org/dev/Creating_a_web_service_client#Text_formats) for details.
 
-### Providing explicit token without authentication
+    c.call({
+        wsfunction: "local_myplugin_my_function",
+        arguments: {
+            answer: 42
+        },
+        settings: {
+            raw: false,
+            filter: true
+        }
 
-This is not implemented yet. Changes in the API can be expected.
+    }, function (error, data) {
+        // handle eventual error and process returned data here
+    });
 
-### Uploading files via web service
+The `call()` method is chainable, allowing synchronous execution of multiple web service calls.
 
-Not implemented yet.
+## TODO
 
-## Tests
-
-Not implemented yet.
+* Uploading files via web service
 
 ## Changes
 
+* 0.2.0 - The initialization and API/signatures improved (#1). Added ability to authenticate by explicitly provided token (#3).
+          Added tests.
 * 0.1.0 - Initial release. The API should not be considered stable yet (as the [version number](http://semver.org/) suggests).
