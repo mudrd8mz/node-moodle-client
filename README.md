@@ -68,7 +68,7 @@ To debug and log the client functionality, install and use the winston logger.
     });
 
 To use a custom web service, provide its shortname when creating a new instance of the client. If the service is not specified, the
-client default to using the `moodle_mobile_app` service.
+client defaults to using the `moodle_mobile_app` service.
 
     var c = client.create({
         wwwroot: "http://localhost/moodle/",
@@ -115,7 +115,7 @@ See [moodle dev docs](https://docs.moodle.org/dev/Creating_a_web_service_client#
         // handle eventual error and process returned data here
     });
 
-The `call()` method is chainable, allowing synchronous execution of multiple web service calls.
+The `call()` method is chainable.
 
 ## TODO
 
