@@ -259,8 +259,7 @@ client.prototype.call = function (options, callback) {
     query = querystring.stringify(query);
 
     if ("method" in settings) {
-        if (!(settings.method === "GET" || settings.method === "POST")
-                || self.protocol.METHODS.indexOf(settings.method) == -1) {
+        if (settings.method !== "GET" && settings.method !== "POST") {
             self.logger.error("[call] requested method not supported (only GET and POST supported)");
             return callback(new Error("unsupported protocol method"));
         }
