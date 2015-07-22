@@ -126,6 +126,7 @@ If you are connecting via HTTPS to a Moodle site with self-signed certificate, y
 
 ## Changes
 
+* 0.3.0 - Fixed usage over HTTPS (#4). Added support for self-signed SSL certificates (#5).
 * 0.2.0 - The initialization and API/signatures improved (#1). Added ability to authenticate by explicitly provided token (#3).
           Added tests.
 * 0.1.0 - Initial release. The API should not be considered stable yet (as the [version number](http://semver.org/) suggests).
