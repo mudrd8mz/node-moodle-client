@@ -48,7 +48,7 @@ Use the `call()` method to execute a web service function at the remote moodle s
         token: "d457b5e5b0cc31c05ccf38628e4dfc14",
     });
 
-    c.call({wsfunction: "core_webservice_get_site_info"}, function(error, data) {
+    c.call({wsfunction: "core_webservice_get_site_info"}, function(error, info) {
         if (!error) {
             console.log("Hello %s, welcome to %s", info.fullname, info.sitename);
         }
