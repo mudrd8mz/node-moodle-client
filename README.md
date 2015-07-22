@@ -117,6 +117,9 @@ See [moodle dev docs](https://docs.moodle.org/dev/Creating_a_web_service_client#
 
 The `call()` method is chainable.
 
+If you are connecting via HTTPS to a Moodle site with self-signed certificate, you may need to set the
+`settings.sslverify` to false.
+
 ## TODO
 
 * Uploading files via web service

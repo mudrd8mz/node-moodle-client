@@ -211,6 +211,10 @@ client.prototype.call = function (options, callback) {
     var wsfunction;
     var arguments = {};
     var settings = {};
+    var reqopt = {
+        hostname: self.host.hostname,
+        port: self.host.port
+    };
 
     if ("wsfunction" in options) {
         wsfunction = options.wsfunction;
@@ -265,24 +269,26 @@ client.prototype.call = function (options, callback) {
         }
     }
 
+    if ("sslverify" in settings) {
+        if (!settings.sslverify) {
+            reqopt.rejectUnauthorized = false;
+        }
+    }
+
     if (settings.method === "POST") {
 
         // Note that the called wsfunction is submitted in the query, too. This is done
         // intentionally so that the server logs can be easily parsed for the usage
         // analysis.
 
-        var options = {
-            hostname: self.host.hostname,
-            port: self.host.port,
-            method: "POST",
-            path: self.host.pathname + "/webservice/rest/server.php?" + querystring.stringify({wsfunction: wsfunction}),
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Content-Length": query.length
-            }
-        }
+        reqopt.method = "POST";
+        reqopt.path = self.host.pathname + "/webservice/rest/server.php?" + querystring.stringify({wsfunction: wsfunction});
+        reqopt.headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Length": query.length
+        };
 
-        var request = self.protocol.request(options, function(response) {
+        var request = self.protocol.request(reqopt, function(response) {
 
             if (response.statusCode != 200) {
                 self.logger.error("[call] unexpected response status code %d", response.statusCode);
@@ -304,13 +310,9 @@ client.prototype.call = function (options, callback) {
 
     } else {
 
-        var options = {
-            hostname: self.host.hostname,
-            port: self.host.port,
-            path: self.host.pathname + "/webservice/rest/server.php?" + query
-        }
+        reqopt.path = self.host.pathname + "/webservice/rest/server.php?" + query;
 
-        self.protocol.get(options, function(response) {
+        self.protocol.get(reqopt, function(response) {
 
             if (response.statusCode != 200) {
                 self.logger.error("[call] unexpected response status code %d", response.statusCode);
