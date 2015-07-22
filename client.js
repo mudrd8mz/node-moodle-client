@@ -21,15 +21,12 @@ module.exports = {
 /**
  * Represents a moodle API client.
  *
- * The options object supports the following properties.
- *
- * {string} wwwroot - The moodle hostname to connect to.
- * {winston.Logger} [logger] - The logger to use, defaults to a dummy non-logger.
- * {string} [service=moodle_mobile_app] - The web service to use.
- * {string} [token] - The access token to use.
- *
  * @constructor
  * @param {object} options - Client initialization options.
+ * @param {string} options.wwwroot - The moodle hostname to connect to.
+ * @param {winston.Logger} [options.logger] - The logger to use, defaults to a dummy non-logger.
+ * @param {string} [options.service=moodle_mobile_app] - The web service to use.
+ * @param {string} [options.token] - The access token to use.
  */
 function client(options) {
     var self = this;
@@ -84,16 +81,13 @@ function client(options) {
 /**
  * Authenticate the user.
  *
- * The options object supports the following properties.
- *
- * {string} token - The access token to use.
- * {string} username - The username to use to authenticate us.
- * {string} password - The password to use to authenticate us.
- *
  * Either token, or the username and password must be provided.
  *
  * @method
  * @param {object} options
+ * @param {string} [options.token] - The access token to use.
+ * @param {string} [options.username] - The username to use to authenticate us.
+ * @param {string} [options.password] - The password to use to authenticate us.
  * @param {client_authenticated_callback} callback
  */
 client.prototype.authenticate = function (options, callback) {
@@ -195,14 +189,16 @@ client.prototype.authenticate = function (options, callback) {
 /**
  * Execute a web service function.
  *
- * The options object supports the following properties.
- *
- * {string} function - The name of the web service function to call.
- * {object} [arguments={}] - Web service function arguments.
- * {object} [settings={}] - Additional settings affecting the execution.
- *
  * @method
- * @param {object} options
+ * @param {object} options - Options affecting the web service function execution.
+ * @param {string} options.function - The name of the web service function to call.
+ * @param {object} [options.arguments={}] - Web service function arguments.
+ * @param {object} [options.settings={}] - Additional settings affecting the execution.
+ * @param {boolean} [options.settings.raw=false] - Do not apply format_text() on description/summary/textarea.
+ * @param {boolean} [options.settings.fileurl=true] - Convert file urls to use the webservice/pluginfile.php.
+ * @param {boolean} [options.settings.filter=false] - Apply filters during format_text().
+ * @param {boolean} [options.settings.sslverify=true] - Verify the server SSL certificate.
+ * @param {string} [options.settings.method=GET] - HTTP method to use (GET|POST).
  * @param {function_executed_callback} callback - The callback to execute.
  * @return {object} - The client instance (to make it chainable).
  */
