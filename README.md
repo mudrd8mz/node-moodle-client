@@ -98,6 +98,21 @@ settings object.
         logger.info("Done!");
     });
 
+The client uses the native `querystring` module to convert the passed arguments into the actual HTTP request query. In case of more
+complex structures, your app will have to prepare the key-value pair of arguments itself. For example, when calling the function
+`core_cohort_add_cohort_members` the passed arguments should look something like
+
+    arguments : {
+          "members[0][cohorttype][type]": "id",
+          "members[0][cohorttype][value]": "1",
+          "members[0][usertype][type]": "id",
+          "members[0][usertype][value]": "10",
+          "members[1][cohorttype][type]": "id",
+          "members[1][cohorttype][value]": "1",
+          "members[1][usertype][type]": "id",
+          "members[1][usertype][value]": "11",
+    };
+
 Additional settings can be provided via the settings object, such as the response data formatting.
 See [moodle dev docs](https://docs.moodle.org/dev/Creating_a_web_service_client#Text_formats) for details.
 
