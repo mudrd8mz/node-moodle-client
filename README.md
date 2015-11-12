@@ -1,6 +1,8 @@
 moodle-client
 =============
 
+[![Build Status](https://travis-ci.org/mudrd8mz/node-moodle-client.svg?branch=master)](https://travis-ci.org/mudrd8mz/node-moodle-client)
+
 node.js client for [moodle](https://moodle.org/) web services API
 
 ## Requirements
