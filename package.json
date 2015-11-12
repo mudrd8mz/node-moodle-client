@@ -24,9 +24,10 @@
   },
   "homepage": "https://github.com/mudrd8mz/node-moodle-client#readme",
   "dependencies": {
-    "concat-stream": "^1.4.10"
+    "bluebird": "^3.0.5",
+    "request-promise": "^1.0.2"
   },
   "devDependencies": {
-    "mocha": "^2.2.5"
+    "mocha": "^2.3.3"
   }
 }

@@ -1,20 +1,47 @@
 /**
  * API client for the moodle web services.
  *
- * @module moodle-api
+ * This is a thin wrapper around the request-promise module to simplify the
+ * common querying Moodle external functions exposed via web services.  The
+ * client uses webservice/rest/server.php end-point and supports authentication
+ * via permanent tokens (which can be provided explicitly or obtained via login).
+ *
+ * @module moodle-client
  * @author David Mudrak <david@moodle.com>
  * @license BSD-2-Clause
  */
 
-const url = require("url");
-const http = require("http");
-const https = require("https");
-const querystring = require("querystring");
-const concat = require("concat-stream");
+"use strict";
+
+var request_promise = require("request-promise");
+var Promise = require("bluebird");
 
 module.exports = {
-    create: function (options) {
-        return new client(options);
+    /**
+     * Factory method promising an authenticated client instance.
+     *
+     * @method
+     * @returns {Promise}
+     */
+    init: function (options) {
+        options = options || {};
+        var c = new client(options);
+
+        if (c.token !== null) {
+            // If the token was explicitly provided, there is nothing to wait for - return
+            // the promised client.
+            return Promise.resolve(c);
+
+        } else {
+            // Otherwise return the pending promise of the authenticated client.
+            if (!("username" in options)) {
+                return Promise.reject("coding error: no username (or token) provided");
+            }
+            if (!("password" in options)) {
+                return Promise.reject("coding error: no password (or token) provided");
+            }
+            return authenticate_client(c, options.username, options.password);
+        }
     }
 }
 
@@ -27,9 +54,18 @@ module.exports = {
  * @param {winston.Logger} [options.logger] - The logger to use, defaults to a dummy non-logger.
  * @param {string} [options.service=moodle_mobile_app] - The web service to use.
  * @param {string} [options.token] - The access token to use.
+ * @param {string} [options.username] - The username to use to authenticate us (if no token provided).
+ * @param {string} [options.password] - The password to use to authenticate us (if no token provided).
+ * @param {bool} [options.strictSSL] - If set to false, SSL certificates do not need to be valid.
  */
 function client(options) {
     var self = this;
+
+    self.logger = null;
+    self.wwwroot = null;
+    self.service = null;
+    self.token = null;
+    self.strictSSL = true;
 
     options = options || {};
 
@@ -46,16 +82,7 @@ function client(options) {
     }
 
     if ("wwwroot" in options) {
-        self.host = url.parse(options.wwwroot);
-
-        if (self.host.protocol === "https:") {
-            self.protocol = https;
-
-        } else {
-            self.logger.warn("[init] client using http protocol - credentials are transmitted unencrypted");
-            self.protocol = http;
-        }
-
+        self.wwwroot = options.wwwroot;
     } else {
         self.logger.error("[init] wwwroot not defined");
     }
@@ -63,164 +90,54 @@ function client(options) {
     if ("service" in options) {
         self.service = options.service;
     } else {
+        self.logger.debug("[init] using default service moodle_mobile_app");
         self.service = "moodle_mobile_app";
     }
 
     if ("token" in options) {
+        self.logger.debug("[init] setting up explicit token");
         self.token = options.token;
+    } else {
+        self.logger.debug("[init] no explicit token provided - requires authentication");
+    }
+
+    if ("strictSSL" in options) {
+        if (!options.strictSSL) {
+            self.logger.warn("[warn] ssl certificates not required to be valid");
+            self.strictSSL = false;
+        }
     }
 }
 
 /**
- * The callback executed by the authenticate() method.
- *
- * @callback client_authenticated_callback
- * @param error
- */
-
-/**
- * Authenticate the user.
- *
- * Either token, or the username and password must be provided.
- *
- * @method
- * @param {object} options
- * @param {string} [options.token] - The access token to use.
- * @param {string} [options.username] - The username to use to authenticate us.
- * @param {string} [options.password] - The password to use to authenticate us.
- * @param {client_authenticated_callback} callback
- */
-client.prototype.authenticate = function (options, callback) {
-    var self = this;
-
-    options = options || {};
-
-    if ("token" in options) {
-        self.logger.debug("[auth] token provided");
-        self.token = options.token;
-        return callback(null);
-    } else {
-        self.token = null;
-    }
-
-    if ("username" in options) {
-        self.username = options.username;
-    } else {
-        self.username = null;
-    }
-
-    if ("password" in options) {
-        self.password = options.password;
-    } else {
-        self.password = null;
-    }
-
-    if (self.token === null && (self.username === null || self.password === null)) {
-        self.logger.error("[auth] either token or login credentials must be provided");
-        return callback(new Error("either token or login credentials must be provided"));
-    }
-
-    self.logger.debug("[auth] requesting %s token from %s", self.service, self.host.href);
-
-    // Note that we are submitting credentials via POST so that they are not stored in the
-    // web server logs by default. On the other hand, we intentionally submit the service
-    // name as a part of the query string so that the access logs can be analysed easily.
-
-    var options = {
-        hostname: self.host.hostname,
-        port: self.host.port,
-        method: "POST",
-        path: self.host.pathname + "/login/token.php?" + querystring.stringify({
-            service: self.service
-        }),
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-    }
-
-    var request = self.protocol.request(options, function(response) {
-
-        if (response.statusCode != 200) {
-            self.logger.error("[auth] unexpected response status code %d", response.statusCode);
-            return callback(new Error("unexpected response status code"));
-        }
-
-        response.pipe(concat({encoding: "string"}, function (data) {
-
-            try {
-                data = JSON.parse(data);
-            } catch (e) {
-                self.logger.error("[auth] unable to parse server response");
-                return callback(e);
-            }
-
-            if (data.error) {
-                self.logger.error("[auth] authentication failed: %s", data.error);
-                return callback(data.error);
-            }
-
-            if (data.token) {
-                self.logger.debug("[auth] token obtained");
-                self.token = data.token;
-                return callback(null);
-            }
-
-            return callback(new Error("unexpected response format"));
-        }));
-    });
-
-    request.on("error", function (e) {
-        self.logger.error("[auth] POST error: %s", e.message);
-        return callback(e);
-    });
-
-    request.write(querystring.stringify({username: self.username, password: self.password}));
-    request.end();
-};
-
-/**
- * The callback executed by the call() method.
- *
- * @callback function_executed_callback
- * @param {null|object|string} error - Thrown exception or error, if any.
- * @param {null|object} data - Returned data structure, if any.
- */
-
-/**
- * Execute a web service function.
+ * Call a web service function.
  *
  * @method
  * @param {object} options - Options affecting the web service function execution.
  * @param {string} options.function - The name of the web service function to call.
- * @param {object} [options.arguments={}] - Web service function arguments.
+ * @param {object} [options.args={}] - Web service function arguments.
+ * @param {string} [options.method=GET] - HTTP method to use (GET|POST).
  * @param {object} [options.settings={}] - Additional settings affecting the execution.
  * @param {boolean} [options.settings.raw=false] - Do not apply format_text() on description/summary/textarea.
  * @param {boolean} [options.settings.fileurl=true] - Convert file urls to use the webservice/pluginfile.php.
  * @param {boolean} [options.settings.filter=false] - Apply filters during format_text().
- * @param {boolean} [options.settings.sslverify=true] - Verify the server SSL certificate.
- * @param {string} [options.settings.method=GET] - HTTP method to use (GET|POST).
- * @param {function_executed_callback} callback - The callback to execute.
- * @return {object} - The client instance (to make it chainable).
+ * @return {Promise}
  */
-client.prototype.call = function (options, callback) {
+client.prototype.call = function (options) {
     var self = this;
     var wsfunction;
-    var arguments = {};
+    var args = {};
     var settings = {};
-    var reqopt = {
-        hostname: self.host.hostname,
-        port: self.host.port
-    };
 
     if ("wsfunction" in options) {
         wsfunction = options.wsfunction;
     } else {
         self.logger.error("[call] missing function name to execute");
-        return callback(new Error("missing function name to execute"));
+        return Promise.reject("missing function name to execute");
     }
 
-    if ("arguments" in options) {
-        arguments = options.arguments;
+    if ("args" in options) {
+        args = options.args;
     }
 
     if ("settings" in options) {
@@ -229,17 +146,26 @@ client.prototype.call = function (options, callback) {
 
     self.logger.debug("[call] calling web service function %s", wsfunction);
 
-    var query = JSON.parse(JSON.stringify(arguments));
+    var request_options = {
+        uri: self.wwwroot + "/webservice/rest/server.php",
+        json: true,
+        qs: args,
+        qsStringifyOptions: {
+            arrayFormat: "indices"
+        },
+        strictSSL: self.strictSSL,
+        method: "GET"
+    }
 
-    query.wstoken = self.token;
-    query.wsfunction = wsfunction;
-    query.moodlewsrestformat = "json";
+    request_options.qs.wstoken = self.token;
+    request_options.qs.wsfunction = wsfunction;
+    request_options.qs.moodlewsrestformat = "json";
 
     if ("raw" in settings) {
         // False by default. If true, the format_text() is not applied to description/summary/textarea.
         // Instead, the raw content from the DB is returned.
         // Requires moodle 2.3 and higher.
-        query.moodlewssettingraw = settings.raw;
+        request_options.qs.moodlewssettingraw = settings.raw;
     }
 
     if ("fileurl" in settings) {
@@ -247,116 +173,69 @@ client.prototype.call = function (options, callback) {
         // http://xxxx/webservice/pluginfile.php/yyyyyyyy.
         // If false, the raw file url content from the DB is returned (e.g. @@PLUGINFILE@@).
         // Requires moodle 2.3 and higher.
-        query.moodlewssettingfileurl = settings.fileurl;
+        request_options.qs.moodlewssettingfileurl = settings.fileurl;
     }
 
     if ("filter" in settings) {
         // False by default. If true, the function will apply filter during format_text().
         // Requires moodle 2.3 and higher.
-        query.moodlewssettingfilter = settings.filter;
+        request_options.qs.moodlewssettingfilter = settings.filter;
     }
 
-    query = querystring.stringify(query);
-
-    if ("method" in settings) {
-        if (settings.method !== "GET" && settings.method !== "POST") {
-            self.logger.error("[call] requested method not supported (only GET and POST supported)");
-            return callback(new Error("unsupported protocol method"));
+    if ("method" in options) {
+        if (options.method === "GET" || options.method === "get") {
+            // No problem, this is the default defined above.
+        } else if (options.method === "POST" || options.method === "post") {
+            // Provide the arguments as in URL-encoded forms.
+            request_options.method = "POST";
+            request_options.form = request_options.qs;
+            delete request_options.qs;
+        } else {
+            self.logger.error("[call] unsupported request method");
+            return Promise.reject("unsupported request method");
         }
     }
 
-    if ("sslverify" in settings) {
-        if (!settings.sslverify) {
-            reqopt.rejectUnauthorized = false;
-        }
-    }
-
-    if (settings.method === "POST") {
-
-        // Note that the called wsfunction is submitted in the query, too. This is done
-        // intentionally so that the server logs can be easily parsed for the usage
-        // analysis.
-
-        reqopt.method = "POST";
-        reqopt.path = self.host.pathname + "/webservice/rest/server.php?" + querystring.stringify({wsfunction: wsfunction});
-        reqopt.headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": query.length
-        };
-
-        var request = self.protocol.request(reqopt, function(response) {
-
-            if (response.statusCode != 200) {
-                self.logger.error("[call] unexpected response status code %d", response.statusCode);
-                return callback(new Error("unexpected response status code " + response.statusCode));
-            }
-
-            response.pipe(concat({encoding: "string"}, function (data) {
-                process_request_response(self.logger, data, callback);
-            }));
-        });
-
-        request.on("error", function (e) {
-            self.logger.error("[call] POST error: %s", e.message);
-            return callback(e);
-        });
-
-        request.write(query);
-        request.end();
-
-    } else {
-
-        reqopt.path = self.host.pathname + "/webservice/rest/server.php?" + query;
-
-        self.protocol.get(reqopt, function(response) {
-
-            if (response.statusCode != 200) {
-                self.logger.error("[call] unexpected response status code %d", response.statusCode);
-                return callback(new Error("unexpected response status code " + response.statusCode));
-            }
-
-            response.pipe(concat({encoding: "string"}, function (data) {
-                process_request_response(self.logger, data, callback);
-            }));
-
-        }).on("error", function (e) {
-            self.logger.error("[call] GET error: %s", e.message);
-            return callback(e);
-        });
-    }
-
-    return self;
+    return request_promise(request_options);
 };
 
 /**
- * Helper for processing the response for our GET or POST requests.
- *
- * @param {winston.Logger} logger - The logger to use.
- * @param {string} data - The response body.
- * @param {function_executed_callback} callback - The callback to execute.
+ * @param {client} client
+ * @param {string} username - The username to use to authenticate us.
+ * @param {string} password - The password to use to authenticate us.
+ * @returns {Promise}
  */
-function process_request_response(logger, data, callback) {
+function authenticate_client(client, username, password) {
+    return new Promise(function (resolve, reject) {
+        client.logger.debug("[init] requesting %s token from %s", client.service, client.wwwroot);
+        var options = {
+            uri: client.wwwroot + "/login/token.php",
+            method: "POST",
+            form: {
+                service: client.service,
+                username: username,
+                password: password
+            },
+            strictSSL: client.strictSSL,
+            json: true
+        }
 
-    try {
-        data = JSON.parse(data);
-    } catch (e) {
-        logger.error("[call] unable to parse server response");
-        return callback(e);
-    }
-
-    if (data === null) {
-        // Some moodle web service functions do not return any data.
-        logger.debug("[call] null data returned");
-        return callback(null, null);
-    }
-
-    if (data.exception) {
-        logger.error("%s: %s [%s]", data.exception, data.message, data.errorcode);
-        logger.debug(data.debuginfo);
-        return callback(data);
-    }
-
-    logger.debug("[call] data returned");
-
-    return callback(null, data);
+        request_promise(options)
+            .then(function(res) {
+                if ("token" in res) {
+                    client.token = res.token;
+                    client.logger.debug("[init] token obtained");
+                    resolve(client);
+                } else if ("error" in res) {
+                    client.logger.error("[init] authentication failed: " + res.error);
+                    reject(new Error("authentication failed: " + res.error));
+                } else {
+                    client.logger.error("[init] authentication failed: unexpected server response");
+                    reject(new Error("authentication failed: unexpected server response"));
+                }
+            })
+            .catch(function(err) {
+                reject(err);
+            });
+    });
 }

@@ -5,7 +5,8 @@ node.js client for [moodle](https://moodle.org/) web services API
 
 ## Requirements
 
-* moodle web services via REST protocol [enabled](https://docs.moodle.org/en/Using_web_services).
+* moodle web services via REST protocol
+  [enabled](https://docs.moodle.org/en/Using_web_services).
 
 ## Installation
 
@@ -13,127 +14,178 @@ node.js client for [moodle](https://moodle.org/) web services API
 
 ## Usage
 
-Call the `create()` function provided by the module to get a new instance of the client.
+The client exposes promises API via [bluebird](http://bluebirdjs.com/)
+implementation.
 
-    const client = require("moodle-client");
+Call the `init()` function provided by the module to get a promise of a new
+instance of the client. The promise fulfills with the instance of the client
+ready to use for other requests.
 
-    var c = client.create({
+    var moodle_client = require("moodle-client");
+
+    moodle_client.init({
         wwwroot: "http://localhost/moodle/",
         token: "d457b5e5b0cc31c05ccf38628e4dfc14"
+
+    }).then(function(client) {
+        do_something(client);
+
+    }).catch(function(err) {
+        console.log("Unable to initialize the client: " + err);
     });
 
-Alternatively, to obtain the token for the given username and password, use the `authenticate()` method.
+Instead of providing the token explicitly, you can let the client authenticate
+via provided username and password.
 
-    const client = require("moodle-client");
+    var moodle_client = require("moodle-client");
 
-    var c = client.create({
-        wwwroot: "http://localhost/moodle/"
-    });
-
-    c.authenticate({
+    moodle_client.init({
+        wwwroot: "http://localhost/moodle/",
         username: "mysystemusername",
         password: "my$y$tem pa33w0rd"
-    }, function (error) {
-        if (!error) {
-            // Client is authenticated and ready to be used.
-        }
+
+    }).then(function(client) {
+        do_something(client);
+
+    }).catch(function(err) {
+        console.log("Unable to initialize the client: " + err);
     });
 
-Use the `call()` method to execute a web service function at the remote moodle site.
+Use the client's `call()` method to execute a web service function at the
+remote moodle site. The returned promise fulfills with the data returned by the
+remote function.
 
-    const client = require("moodle-client");
+    var moodle_client = require("moodle-client");
 
-    var c = client.create({
+    moodle_client.init({
         wwwroot: "http://localhost/moodle/",
-        token: "d457b5e5b0cc31c05ccf38628e4dfc14",
+        token: "d457b5e5b0cc31c05ccf38628e4dfc14"
+
+    }).then(function(client) {
+        do_something(client);
+
+    }).catch(function(err) {
+        console.log("Unable to initialize the client: " + err);
     });
 
-    c.call({wsfunction: "core_webservice_get_site_info"}, function(error, info) {
-        if (!error) {
+    function do_something(client) {
+        client.call({
+            wsfunction: "core_webservice_get_site_info",
+
+        }).then(function(info) {
             console.log("Hello %s, welcome to %s", info.fullname, info.sitename);
-        }
-    });
+        });
+    }
 
-To debug and log the client functionality, install and use the winston logger.
+To debug and/or log the client functionality, install and use the `winston`
+logger.
 
-    const client = require("moodle-client");
-    const logger = require("winston");
+    var moodle_client = require("moodle-client");
+    var logger = require("winston");
 
     logger.level = "debug";
     logger.cli();
 
-    var c = client.create({
+    moodle_client.init({
+        logger: logger,
         wwwroot: "http://localhost/moodle/",
-        logger: logger
+        token: "d457b5e5b0cc31c05ccf38628e4dfc14"
+
+    }).then(function(client) {
+        do_something(client);
+
+    }).catch(function(err) {
+        console.log("Unable to initialize the client: " + err);
     });
 
-To use a custom web service, provide its shortname when creating a new instance of the client. If the service is not specified, the
-client defaults to using the `moodle_mobile_app` service.
+To use a custom web service, provide its shortname when creating a new instance
+of the client. If the `service` is not specified, the client defaults to using
+the `moodle_mobile_app` service.
 
-    var c = client.create({
+    var init = moodle_client.init({
         wwwroot: "http://localhost/moodle/",
+        token: "d457b5e5b0cc31c05ccf38628e4dfc14",
         service: "our_cohorts_management"
     });
 
+    init.then(...);
 
-To pass arguments to the web service function, provide them via the arguments object. Additional settings can be provided via the
-settings object.
+To pass arguments to the web service function, provide them via the `args`
+object. To use POST rather than the default GET request method, set the
+`method` property of the call options.
 
-    client.create({
-        wwwroot: "http://localhost/moodle/",
-        logger: logger,
-        token: "d457b5e5b0cc31c05ccf38628e4dfc14"
+    init.then(function(client) {
+        client.call({
+            wsfunction: "core_message_unblock_contacts",
+            method: "POST",
+            args: {
+                userids: [1, 2, 3, 4, 5]
+            }
 
-    }).call({
-        wsfunction: "core_message_unblock_contacts",
-        arguments: {
-            "userids[]": [1, 2, 3, 4, 5]
-        },
-        settings: {
-            method: "POST"
-        }
-
-    }, function(error, data) {
-        if (error) throw error;
-        logger.info("Done!");
+        }).then(function() {
+            console.log("Done");
+        });
     });
 
-The client uses the native `querystring` module to convert the passed arguments into the actual HTTP request query. In case of more
-complex structures, your app will have to prepare the key-value pair of arguments itself. For example, when calling the function
+The client uses `request-promise` to actually perform the requests. Which in
+turn uses `qs` to stringify the args into the query string. Please refer to the
+[qs module documentation](https://github.com/hapijs/qs#stringifying) for how to
+pass complex data structures. For example, when calling the function
 `core_cohort_add_cohort_members` the passed arguments should look something like
 
-    arguments : {
-          "members[0][cohorttype][type]": "id",
-          "members[0][cohorttype][value]": "1",
-          "members[0][usertype][type]": "id",
-          "members[0][usertype][value]": "10",
-          "members[1][cohorttype][type]": "id",
-          "members[1][cohorttype][value]": "1",
-          "members[1][usertype][type]": "id",
-          "members[1][usertype][value]": "11",
-    };
+    args: {
+        members: [
+            {
+                cohorttype: {
+                    type: "id",
+                    value: "1"
+                },
+                usertype: {
+                    type: "id",
+                    value: "3"
+                }
+            },
+            {
+                cohorttype: {
+                    type: "id",
+                    value: "1"
+                },
+                usertype: {
+                    type: "id",
+                    value: "4"
+                }
+            }
+        ]
+    }
 
-Additional settings can be provided via the settings object, such as the response data formatting.
-See [moodle dev docs](https://docs.moodle.org/dev/Creating_a_web_service_client#Text_formats) for details.
+Additional settings can be provided via the settings object, such as the
+response data formatting. See [moodle dev
+docs](https://docs.moodle.org/dev/Creating_a_web_service_client#Text_formats)
+for details.
 
-    c.call({
+    var mycall = client.call({
         wsfunction: "local_myplugin_my_function",
-        arguments: {
+        args: {
             answer: 42
         },
         settings: {
             raw: false,
             filter: true
         }
+    );
 
-    }, function (error, data) {
-        // handle eventual error and process returned data here
+    mycall.then(...);
+
+If you are connecting via HTTPS to a Moodle site with self-signed certificate,
+you may need to set the `strictSSL` option to false.
+
+    var init = moodle_client.init({
+        wwwroot: "https://localhost/moodle/",
+        token: "d457b5eo5b0cc31c05ccf38628e4dfc14",
+        strictSSL: false
     });
 
-The `call()` method is chainable.
-
-If you are connecting via HTTPS to a Moodle site with self-signed certificate, you may need to set the
-`settings.sslverify` to false.
+    init.then(...);
 
 ## TODO
 
@@ -141,7 +193,25 @@ If you are connecting via HTTPS to a Moodle site with self-signed certificate, y
 
 ## Changes
 
-* 0.3.0 - Fixed usage over HTTPS (#4). Added support for self-signed SSL certificates (#5).
-* 0.2.0 - The initialization and API/signatures improved (#1). Added ability to authenticate by explicitly provided token (#3).
-          Added tests.
-* 0.1.0 - Initial release. The API should not be considered stable yet (as the [version number](http://semver.org/) suggests).
+### 0.4.0
+
+* Massive non backwards compatible changes in the API.
+* Now uses `request-promise` to actually perform the requests.
+* The API changed to return promises (via `bluebird`).
+* The eventual authentication happens if needed during the initialization.
+* The module does not provide `create()` any more, use `init()` returning the promise now.
+
+### 0.3.0
+
+* Fixed usage over HTTPS (#4). Added support for self-signed SSL certificates (#5).
+
+### 0.2.0
+
+* The initialization and API/signatures improved (#1).
+* Added ability to authenticate by explicitly provided token (#3).
+* Added tests.
+
+### 0.1.0
+
+* Initial release. The API should not be considered stable yet (as the [version
+  number](http://semver.org/) suggests).

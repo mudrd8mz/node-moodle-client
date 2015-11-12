@@ -1,18 +1,19 @@
-const moodle_client = require("./client");
-const http = require("http");
-const url = require("url");
-const querystring = require("querystring");
-const assert = require("assert");
+"use strict";
 
-const PORT = 59999;
-const TOKEN = "Ex@mpleT0kenThat1s5upposedToB3Returned";
-const USERNAME = "wsuser";
-const PASSWORD = "wsp@sswd";
-const SERVICE = "test-node-client";
+var moodle_client = require("./client");
+var assert = require("assert");
 
-var server;
+var http = require("http");
+var url = require("url");
+var querystring = require("querystring");
 
-server = http.createServer(function(request, response) {
+var PORT = 59999;
+var TOKEN = "Ex@mpleT0kenThat1s5upposedToB3Returned";
+var USERNAME = "wsuser";
+var PASSWORD = "wsp@sswd";
+var SERVICE = "test-node-client";
+
+var server = http.createServer(function(request, response) {
     var uri = url.parse(request.url);
     var getparams = querystring.parse(uri.query);
     var postbody = "";
@@ -28,7 +29,7 @@ server = http.createServer(function(request, response) {
         }
 
         if (uri.pathname === "/moodle/login/token.php") {
-            if (getparams.service === SERVICE && postparams.username === USERNAME && postparams.password === PASSWORD) {
+            if (postparams.service === SERVICE && postparams.username === USERNAME && postparams.password === PASSWORD) {
                 response.write(JSON.stringify({token: TOKEN}));
             } else {
                 // Note that Moodle still returns HTTP 200 in case of error.
@@ -41,10 +42,21 @@ server = http.createServer(function(request, response) {
                 response.write(JSON.stringify(null));
             } else if (getparams.wsfunction === "sum_get") {
                 response.write(JSON.stringify(parseInt(getparams.a, 10) + parseInt(getparams.b, 10)));
-            } else if (getparams.wsfunction === "sum_post") {
+            } else if (postparams.wsfunction === "sum_post") {
                 response.write(JSON.stringify(parseInt(postparams.a, 10) + parseInt(postparams.b, 10)));
+            } else if (getparams.wsfunction === "complex_args") {
+                if (getparams["a[0]"] == 0
+                    && getparams["a[1]"] == "b"
+                    && getparams["a[2]"] == "2"
+                    && getparams["c[0][x]"] == "1"
+                    && getparams["c[0][y]"] == "2"
+                    && getparams["c[1][x]"] == "3"
+                    && getparams["c[1][y]"] == "4"
+                ) {
+                    response.write(JSON.stringify("ok"));
+                }
             } else {
-                response.write(JSON.stringify({wsfunction: getparams.wsfunction}));
+                response.write(JSON.stringify({executed: getparams.wsfunction}));
             }
         }
 
@@ -53,48 +65,7 @@ server = http.createServer(function(request, response) {
 });
 
 describe("moodle-client initialization", function() {
-    describe("#create()", function() {
-
-        it("should parse the given wwwroot", function() {
-            var client = moodle_client.create({wwwroot: "http://localhost:" + PORT + "/moodle"});
-            assert.equal("localhost", client.host.hostname);
-            assert.equal(PORT, client.host.port);
-            assert.equal("/moodle", client.host.pathname);
-        });
-
-        it("should warn if plain http protocol is used", function() {
-            var warned = false;
-            var client = moodle_client.create({
-                wwwroot: "http://localhost",
-                logger: {
-                    warn: function() {
-                        warned = true;
-                    }
-                }
-            });
-            assert(warned);
-        });
-
-        it("should set explicit service if provided", function() {
-            var client = moodle_client.create({service: SERVICE});
-            assert.equal(SERVICE, client.service);
-        });
-
-        it("should fall back to using moodle_mobile_app service", function() {
-            var client = moodle_client.create();
-            assert.equal("moodle_mobile_app", client.service);
-        });
-
-        it("should set token if provided, without the need to call authenticate()", function() {
-            var client = moodle_client.create({token: "BarBar"});
-            assert.equal("BarBar", client.token);
-        });
-
-    });
-});
-
-describe("moodle-client authentication", function() {
-    describe("#authenticate()", function() {
+    describe("#init()", function() {
 
         before(function() {
             server.listen(PORT);
@@ -104,44 +75,53 @@ describe("moodle-client authentication", function() {
             server.close();
         });
 
-        it("should fail if neither token nor login credentials are provided", function(done) {
-            var client = moodle_client.create({wwwroot: "http://localhost"});
-            client.authenticate(null, function(error) {
-                assert(error);
-                done();
+        it("should reject if neither token nor credentials are provided", function() {
+            return moodle_client.init().then(function(client) {
+                    assert.ok(false, "This promise should not be fulfilled.");
+                }).catch(function(error) {
+                    assert.ok(true, "This promise should be rejected.");
+                });
+        });
+
+        it("should set token if provided", function() {
+            return moodle_client.init({token: "BarBar"}).then(function(client) {
+                assert.equal("BarBar", client.token);
             });
         });
 
-        it("should set explicit token if provided", function(done) {
-            var client = moodle_client.create();
-            client.authenticate({token: "FooBar"}, function(error) {
-                assert.ifError(error);
-                assert.equal("FooBar", client.token);
-                done();
+        it("should set explicit service if provided", function() {
+            return moodle_client.init({service: SERVICE, token: ""}).then(function(client) {
+                assert.equal(SERVICE, client.service);
             });
         });
 
-        it("should obtain the token from the server", function(done) {
-            var client = moodle_client.create({
+        it("should fall back to using moodle_mobile_app service", function() {
+            return moodle_client.init({token: ""}).then(function(client) {
+                assert.equal("moodle_mobile_app", client.service);
+            });
+        });
+
+        it("should obtain the token from the server", function() {
+            return moodle_client.init({
                 wwwroot: "http://localhost:" + PORT + "/moodle",
-                service: SERVICE
-            });
-            client.authenticate({username: USERNAME, password: PASSWORD}, function(error) {
-                assert.ifError(error);
+                service: SERVICE,
+                username: USERNAME,
+                password: PASSWORD
+            }).then(function(client) {
                 assert.equal(TOKEN, client.token);
-                done();
             });
         });
 
-        it("should throw error on invalid credentials", function(done) {
-            var client = moodle_client.create({
+        it("should reject on invalid credentials", function() {
+            return moodle_client.init({
                 wwwroot: "http://localhost:" + PORT + "/moodle",
-                service: SERVICE
-            });
-            client.authenticate({username: "wrong" + USERNAME, password: PASSWORD}, function(error) {
-                assert(error);
-                assert.strictEqual(null, client.token);
-                done();
+                service: SERVICE,
+                username: "wrong" + USERNAME,
+                password: PASSWORD
+            }).then(function(client) {
+                assert.ok(false, "This promise should not be fulfilled.");
+            }).catch(function(err) {
+                assert.ok(true, "This promise should be rejected.");
             });
         });
     });
@@ -149,51 +129,90 @@ describe("moodle-client authentication", function() {
 
 describe("moodle-client method execution", function() {
     describe("#call()", function() {
-        var client;
+        var init;
 
         before(function() {
             server.listen(PORT);
-            client = moodle_client.create({
-                wwwroot: "http://localhost:" + PORT + "/moodle",
-                service: SERVICE,
-                token: TOKEN
-            });
+            init = moodle_client.init({wwwroot: "http://localhost:" + PORT + "/moodle", service: SERVICE, token: TOKEN});
         });
 
         after(function() {
             server.close();
         });
 
-        it("should allow execution of methods without parameters", function(done) {
-            client.call({wsfunction: "get_status"}, function(error, data) {
-                assert.ifError(error);
-                assert.equal(data.wsfunction, "get_status");
-                done();
+        it("should allow execution of methods without parameters", function() {
+            return init.then(function(client) {
+                return client.call({wsfunction: "get_status"}).then(function(data) {
+                    assert.equal(data.executed, "get_status");
+                });
             });
         });
 
-        it("should allow execution of methods returning no data", function(done) {
-            client.call({wsfunction: "get_no_data"}, function(error, data) {
-                assert.ifError(error);
-                assert.strictEqual(data, null);
-                done();
+        it("should allow execution of methods returning no data", function() {
+            return init.then(function(client) {
+                return client.call({wsfunction: "get_no_data"}).then(function(data) {
+                    assert.strictEqual(data, null);
+                });
             });
         });
 
-        it("should support GET requests", function(done) {
-            client.call({wsfunction: "sum_get", arguments: {a: 2, b: 3}, settings: {method: "GET"}}, function(error, data) {
-                assert.ifError(error);
-                assert.equal(data, 5);
-                done();
+        it("should support GET requests", function() {
+            return init.then(function(client) {
+                return client.call({
+                    wsfunction: "sum_get",
+                    args: {a: 2, b: 3},
+                    method: "GET"
+                }).then(function(data) {
+                    assert.equal(data, 5);
+                });
             });
         });
 
-        it("should support POST requests", function(done) {
-            client.call({wsfunction: "sum_post", arguments: {a: 5, b: 4}, settings: {method: "POST"}}, function(error, data) {
-                assert.ifError(error);
-                assert.equal(data, 9);
-                done();
+        it("should use GET requests by default", function() {
+            return init.then(function(client) {
+                return client.call({
+                    wsfunction: "sum_get",
+                    args: {a: 2, b: 3}
+                }).then(function(data) {
+                    assert.equal(data, 5);
+                });
             });
+        });
+
+        it("should support POST requests", function() {
+            return init.then(function(client) {
+                return client.call({
+                    wsfunction: "sum_post",
+                    args: {a: 2, b: 3},
+                    method: "POST"
+                }).then(function(data) {
+                    assert.equal(data, 5);
+                });
+            });
+        });
+
+        it("should handle complex data structures submitted", function() {
+            return init.then(function(client) {
+                return client.call({
+                    wsfunction: "complex_args",
+                    args: {
+                        a: [0, "b", 2],
+                        c: [
+                        {
+                            x: 1,
+                            y: 2
+                        },
+                        {
+                            x: 3,
+                            y: 4
+                        }
+                        ]
+                    }
+
+                }).then(function(data) {
+                    assert.equal(data, "ok");
+                });
+            })
         });
     });
 });
