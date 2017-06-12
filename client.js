@@ -200,6 +200,29 @@ client.prototype.call = function (options) {
 };
 
 /**
+ * Download a file.
+ *
+ * @method
+ * @param {string} fileURL - The URL of the file to download (the part after "pluginfile.php/").
+ * @return {Promise}
+ */
+client.prototype.download = function(fileURL) {
+    var self = this;
+
+    var request_options = {
+        uri: self.wwwroot + "/webservice/pluginfile.php/" + fileURL,
+        qs: {
+            token: self.token
+        },
+        strictSSL: self.strictSSL,
+        method: "GET",
+        encoding: null
+    }
+
+    return request_promise(request_options);
+}
+
+/**
  * @param {client} client
  * @param {string} username - The username to use to authenticate us.
  * @param {string} password - The password to use to authenticate us.
