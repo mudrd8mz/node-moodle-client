@@ -189,9 +189,91 @@ you may need to set the `strictSSL` option to false.
 
     init.then(...);
 
-## TODO
+## Downloading Moodle files
 
-* Uploading files via web service
+Call the `download()` method of the client to download a file from the Moodle
+file system. The returned promise fulfills with the buffer object with the file
+contents.
+
+    client.download({
+        filepath: "/62/user/private/demo/remote.png",
+        preview: "bigthumb",
+        offline: true
+
+    }).then(function(filebuffer) {
+        fs.writeFile("/tmp/local.png", filebuffer, "binary");
+
+    }).catch(function(err) {
+        console.log("Error downloading the file: " + err);
+        return;
+    });
+
+## Uploading files to Moodle
+
+The client can be used to upload files into the user's draft files area within
+the Moodle file system. Supported are both files with dynamically generated
+contents as well as files already stored in the local file system. See
+https://github.com/request/request#multipartform-data-multipart-form-uploads
+for details on how to specify the data in both cases.
+
+    var files = {
+        myfile1: {
+            value: "This text was uploaded by a client",
+            options: {
+                filename: "helloworld.txt",
+                contentType: "text/plain"
+            }
+        },
+        myfile2: fs.createReadStream("/tmp/upload.png"),
+    };
+
+Once you have such a list of files prepared, call the `upload()` method to
+upload them to the user's draft files area. The returned promise fulfills
+with an array of objects describing the created files.
+
+    client.upload({
+        files: files
+
+    }).then(function(draftfiles) {
+        console.log(draftfiles);
+        return;
+
+    }).catch(function(err) {
+        console.log("Error uploading the file: " + err);
+        return;
+    });
+
+The method allows you to hard-code the itemid within the user's draft area to
+upload files to and eventually the target path for uploaded files, too.
+
+To make use of uploaded files in Moodle, you typically call a webservice
+function that accepts the id of draft item containing the uploaded files. For
+example, to copy files from the temporary draft files area to the persistent
+private files area, use the function `core_user_add_user_private_files`:
+
+    client.upload({
+        files: files
+
+    }).then(function(draftfiles) {
+
+        // Copy files from the draft area to the persistent private files area.
+        client.call({
+            wsfunction: "core_user_add_user_private_files",
+            args: {
+                draftid: draftfiles[0].itemid
+            }
+
+        }).then(function() {
+            console.log("Total of %d files uploaded to your private files area!", draftfiles.length);
+            return;
+        });
+
+        return;
+
+    }).catch(function(err) {
+        console.log("Error uploading the file: " + err);
+        return;
+    });
 
 ## Changes
 

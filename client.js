@@ -200,6 +200,96 @@ client.prototype.call = function (options) {
 };
 
 /**
+ * Download a file from Moodle.
+ *
+ * @method
+ * @param {object} options - Specifies the file to be downloaded.
+ * @param {string} options.filepath - The path to the file within the Moodle filesystem.
+ * @param {string} [options.preview=null] - Preview mode for images (tinyicon|thumb|bigthumb), full image otherwise.
+ * @param {bool} [options.offline=false] - Download the file from the repository even if it is an external link.
+ * @return {Promise}
+ */
+client.prototype.download = function (options) {
+    var self = this;
+
+    if (!("filepath" in options)) {
+        self.logger.error("[download] missing file path to download");
+        return Promise.reject("missing file path to download");
+    }
+
+    var request_options = {
+        uri: self.wwwroot + "/webservice/pluginfile.php",
+        qs: {
+            token: self.token,
+            file: options.filepath,
+        },
+        strictSSL: self.strictSSL,
+        method: "GET",
+        encoding: null
+    }
+
+    if (options.preview) {
+        request_options.qs.preview = options.preview;
+    }
+
+    if (options.offline) {
+        request_options.qs.offline = 1;
+    }
+
+    return request_promise(request_options);
+}
+
+/**
+ * Upload files to the user draft area in the Moodle filesystem.
+ *
+ * The options.files follows the same rules as the formData object described at
+ * https://github.com/request/request#multipartform-data-multipart-form-uploads
+ * (Moodle does not seem to support the array variant though).
+ *
+ * If the itemid is not specified (or it is lesser or equal zero), the Moodle
+ * automatically generates a new random item withing the user drafts area.
+ *
+ * The returned promise fulfills with an array of objects describing the
+ * created files.
+ *
+ * @method
+ * @param {object} options - Specifies files to be uploaded and where to.
+ * @param {object} options.files - Form data providing the files to be uploaded.
+ * @param {number} [options.itemid] - Allows to force uploading to the given area item.
+ * @param {string} [options.targetpath=/] - The path to upload files to within the area item.
+ * @return {Promise}
+ */
+client.prototype.upload = function (options) {
+    var self = this;
+
+    if (!("files" in options)) {
+        self.logger.error("[upload] missing files data");
+        return Promise.reject("missing files data");
+    }
+
+    var request_options = {
+        uri: self.wwwroot + "/webservice/upload.php",
+        json: true,
+        formData: options.files,
+        qs: {
+            token: self.token
+        },
+        strictSSL: self.strictSSL,
+        method: "POST",
+    }
+
+    if (options.targetpath) {
+        request_options.qs.filepath = options.targetpath;
+    }
+
+    if (options.itemid) {
+        request_options.qs.itemid = options.itemid;
+    }
+
+    return request_promise(request_options);
+}
+
+/**
  * @param {client} client
  * @param {string} username - The username to use to authenticate us.
  * @param {string} password - The password to use to authenticate us.
