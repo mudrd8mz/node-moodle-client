@@ -240,6 +240,56 @@ client.prototype.download = function (options) {
 }
 
 /**
+ * Upload files to the user draft area in the Moodle filesystem.
+ *
+ * The options.files follows the same rules as the formData object described at
+ * https://github.com/request/request#multipartform-data-multipart-form-uploads
+ * (Moodle does not seem to support the array variant though).
+ *
+ * If the itemid is not specified (or it is lesser or equal zero), the Moodle
+ * automatically generates a new random item withing the user drafts area.
+ *
+ * The returned promise fulfills with an array of objects describing the
+ * created files.
+ *
+ * @method
+ * @param {object} options - Specifies files to be uploaded and where to.
+ * @param {object} options.files - Form data providing the files to be uploaded.
+ * @param {number} [options.itemid] - Allows to force uploading to the given area item.
+ * @param {string} [options.targetpath=/] - The path to upload files to within the area item.
+ * @return {Promise}
+ */
+client.prototype.upload = function (options) {
+    var self = this;
+
+    if (!("files" in options)) {
+        self.logger.error("[upload] missing files data");
+        return Promise.reject("missing files data");
+    }
+
+    var request_options = {
+        uri: self.wwwroot + "/webservice/upload.php",
+        json: true,
+        formData: options.files,
+        qs: {
+            token: self.token
+        },
+        strictSSL: self.strictSSL,
+        method: "POST",
+    }
+
+    if (options.targetpath) {
+        request_options.qs.filepath = options.targetpath;
+    }
+
+    if (options.itemid) {
+        request_options.qs.itemid = options.itemid;
+    }
+
+    return request_promise(request_options);
+}
+
+/**
  * @param {client} client
  * @param {string} username - The username to use to authenticate us.
  * @param {string} password - The password to use to authenticate us.
