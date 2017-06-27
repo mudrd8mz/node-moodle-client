@@ -189,6 +189,26 @@ you may need to set the `strictSSL` option to false.
 
     init.then(...);
 
+## Downloading Moodle files
+
+Call the `download()` method of the client to download a file from the Moodle
+file system. The returned promise fulfills with the buffer object with the file
+contents.
+
+    client.download({
+        filepath: "/62/user/private/demo/remote.png",
+        preview: "bigthumb",
+        offline: true
+
+    }).then(function(filebuffer) {
+        fs.writeFile("/tmp/local.png", filebuffer, "binary");
+
+    }).catch(function(err) {
+        console.log("Error downloading the file: " + err);
+        return;
+    });
+
+
 ## TODO
 
 * Uploading files via web service
