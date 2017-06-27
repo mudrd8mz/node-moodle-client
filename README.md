@@ -277,6 +277,13 @@ private files area, use the function `core_user_add_user_private_files`:
 
 ## Changes
 
+### 0.5.0
+
+* Added support for downloading files from Moodle. Credit goes to @MayaLekova
+  for the initial implementation of the feature.
+* Added support for uploading files to Moodle.
+* Added basic support for travis-co prechecks.
+
 ### 0.4.0
 
 * Massive non backwards compatible changes in the API.
