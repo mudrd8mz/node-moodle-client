@@ -200,23 +200,40 @@ client.prototype.call = function (options) {
 };
 
 /**
- * Download a file.
+ * Download a file from Moodle.
  *
  * @method
- * @param {string} fileURL - The URL of the file to download (the part after "pluginfile.php/").
+ * @param {object} options - Specifies the file to be downloaded.
+ * @param {string} options.filepath - The path to the file within the Moodle filesystem.
+ * @param {string} [options.preview=null] - Preview mode for images (tinyicon|thumb|bigthumb), full image otherwise.
+ * @param {bool} [options.offline=false] - Download the file from the repository even if it is an external link.
  * @return {Promise}
  */
-client.prototype.download = function(fileURL) {
+client.prototype.download = function (options) {
     var self = this;
 
+    if (!("filepath" in options)) {
+        self.logger.error("[download] missing file path to download");
+        return Promise.reject("missing file path to download");
+    }
+
     var request_options = {
-        uri: self.wwwroot + "/webservice/pluginfile.php/" + fileURL,
+        uri: self.wwwroot + "/webservice/pluginfile.php",
         qs: {
-            token: self.token
+            token: self.token,
+            file: options.filepath,
         },
         strictSSL: self.strictSSL,
         method: "GET",
         encoding: null
+    }
+
+    if (options.preview) {
+        request_options.qs.preview = options.preview;
+    }
+
+    if (options.offline) {
+        request_options.qs.offline = 1;
     }
 
     return request_promise(request_options);
