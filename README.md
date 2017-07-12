@@ -30,7 +30,7 @@ ready to use for other requests.
         token: "d457b5e5b0cc31c05ccf38628e4dfc14"
 
     }).then(function(client) {
-        do_something(client);
+        return do_something(client);
 
     }).catch(function(err) {
         console.log("Unable to initialize the client: " + err);
@@ -47,7 +47,7 @@ via provided username and password.
         password: "my$y$tem pa33w0rd"
 
     }).then(function(client) {
-        do_something(client);
+        return do_something(client);
 
     }).catch(function(err) {
         console.log("Unable to initialize the client: " + err);
@@ -64,18 +64,19 @@ remote function.
         token: "d457b5e5b0cc31c05ccf38628e4dfc14"
 
     }).then(function(client) {
-        do_something(client);
+        return do_something(client);
 
     }).catch(function(err) {
         console.log("Unable to initialize the client: " + err);
     });
 
     function do_something(client) {
-        client.call({
+        return client.call({
             wsfunction: "core_webservice_get_site_info",
 
         }).then(function(info) {
             console.log("Hello %s, welcome to %s", info.fullname, info.sitename);
+            return;
         });
     }
 
@@ -94,7 +95,7 @@ logger.
         token: "d457b5e5b0cc31c05ccf38628e4dfc14"
 
     }).then(function(client) {
-        do_something(client);
+        return do_something(client);
 
     }).catch(function(err) {
         console.log("Unable to initialize the client: " + err);
@@ -117,7 +118,7 @@ object. To use POST rather than the default GET request method, set the
 `method` property of the call options.
 
     init.then(function(client) {
-        client.call({
+        return client.call({
             wsfunction: "core_message_unblock_contacts",
             method: "POST",
             args: {
@@ -126,6 +127,7 @@ object. To use POST rather than the default GET request method, set the
 
         }).then(function() {
             console.log("Done");
+            return;
         });
     });
 
@@ -202,6 +204,7 @@ contents.
 
     }).then(function(filebuffer) {
         fs.writeFile("/tmp/local.png", filebuffer, "binary");
+        return;
 
     }).catch(function(err) {
         console.log("Error downloading the file: " + err);
@@ -257,7 +260,7 @@ private files area, use the function `core_user_add_user_private_files`:
     }).then(function(draftfiles) {
 
         // Copy files from the draft area to the persistent private files area.
-        client.call({
+        return client.call({
             wsfunction: "core_user_add_user_private_files",
             args: {
                 draftid: draftfiles[0].itemid
@@ -267,8 +270,6 @@ private files area, use the function `core_user_add_user_private_files`:
             console.log("Total of %d files uploaded to your private files area!", draftfiles.length);
             return;
         });
-
-        return;
 
     }).catch(function(err) {
         console.log("Error uploading the file: " + err);
