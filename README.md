@@ -84,10 +84,15 @@ To debug and/or log the client functionality, install and use the `winston`
 logger.
 
     var moodle_client = require("moodle-client");
-    var logger = require("winston");
+    var winston = require("winston");
 
-    logger.level = "debug";
-    logger.cli();
+    var logger = winston.createLogger({
+        level: "debug",
+        format: winston.format.simple(),
+        transports: [
+            new winston.transports.Console()
+        ]
+    });
 
     moodle_client.init({
         logger: logger,
